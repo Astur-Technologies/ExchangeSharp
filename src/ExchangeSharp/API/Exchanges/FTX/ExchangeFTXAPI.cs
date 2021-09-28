@@ -286,11 +286,18 @@ namespace ExchangeSharp.API.Exchanges.FTX
 		}
 
 		/// <inheritdoc />
-		protected async override Task<ExchangeOrderResult> OnGetOrderDetailsAsync(string orderId, string marketSymbol = null)
+		protected async override Task<ExchangeOrderResult> OnGetOrderDetailsAsync(string orderId, string marketSymbol = null, bool isClientOrderId = false)
 		{
 			// https://docs.ftx.com/#get-order-status
 
-			JToken result = await MakeJsonRequestAsync<JToken>($"/orders/{orderId}", null, await GetNoncePayloadAsync());
+			var url = "/orders/";
+
+			if (isClientOrderId)
+			{
+				url += "by_client_id/";
+			}
+
+			JToken result = await MakeJsonRequestAsync<JToken>($"{url}{orderId}", null, await GetNoncePayloadAsync());
 
 			return ParseOrder(result);
 		}
@@ -383,7 +390,8 @@ namespace ExchangeSharp.API.Exchanges.FTX
 				{"market", market.MarketSymbol},
 				{"side", order.IsBuy ? "buy" : "sell" },
 				{"type", order.OrderType.ToStringLowerInvariant() },
-				{"size", order.RoundAmount() },	
+				{"size", order.RoundAmount() },
+				{"postOnly", order.IsPostOnly }
 			};
 
 			if (!string.IsNullOrEmpty(order.ClientOrderId))

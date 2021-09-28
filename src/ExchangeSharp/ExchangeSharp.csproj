@@ -22,7 +22,7 @@
     <RepositoryType>git</RepositoryType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
-  
+	
   <ItemGroup>
     <None Include="../../icon.png" Pack="true" PackagePath="\" />
     <None Include="../../LICENSE.txt" Link="LICENSE.txt" Pack="true" PackagePath="" />
@@ -41,10 +41,6 @@
     <EmbeddedResource Include="Properties\Resources\PoloniexWithdrawalFields.csv" />
     <None Remove="nlog.config" />
     <EmbeddedResource Include="nlog.config" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="API\Exchanges\FTX\Models\" />
   </ItemGroup>
 
 </Project>
