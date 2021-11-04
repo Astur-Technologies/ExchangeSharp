@@ -10,12 +10,13 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 #nullable enable
+
+using Force.DeepCloner;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -436,12 +437,19 @@ namespace ExchangeSharp
 		{
 			// note: this method will be slightly slow (milliseconds) the first time it is called due to cache miss and initialization
 			// subsequent calls with cache hits will be nanoseconds
-			return apis.GetOrAdd(type, _exchangeName =>
+			var cachedAPI = apis.GetOrAdd(type, _exchangeName =>
 			{
 				// find the api type
 				Type? foundType = exchangeTypes.FirstOrDefault(t => t == type);
 				return InitializeAPI(foundType, type);
 			});
+
+			cachedAPI = cachedAPI.ShallowClone();
+
+			//HACK need to recreate the request maker because it keeps a reference to the original api.
+			cachedAPI.RequestMaker = new APIRequestMaker(cachedAPI);
+
+			return cachedAPI;
 		}
 
 		/// <summary>
@@ -870,7 +878,9 @@ namespace ExchangeSharp
 		/// <returns>Dictionary of symbols and amounts</returns>
 		public virtual async Task<Dictionary<string, decimal>> GetAmountsAsync()
 		{
-			var amounts = await Cache.CacheMethod(MethodCachePolicy, async() => (await OnGetAmountsAsync()), nameof(GetAmountsAsync));
+			var amounts = await Cache.CacheMethod(MethodCachePolicy, async() =>
+			(await OnGetAmountsAsync()), nameof(GetAmountsAsync)
+			);
 			var globalAmounts = await ExchangeCurrenciesDictionaryToGlobalCurrenciesDictionaryAsync(amounts);
 
 			return globalAmounts;

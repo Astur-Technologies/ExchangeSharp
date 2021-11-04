@@ -63,6 +63,26 @@ namespace ExchangeSharpTests
         }
 
 		[TestMethod]
+		public async Task ExchangeDuplicationTest()
+		{
+			var exchange1 = ExchangeAPI.GetExchangeAPI("Kraken");
+
+			var symbols = await  exchange1.GetMarketSymbolsAsync();
+
+			exchange1.LoadAPIKeysUnsecure("cachedKeys", "cachedkeys2");
+
+			var exchange2 = ExchangeAPI.GetExchangeAPI("Kraken");
+
+			exchange2.LoadAPIKeysUnsecure("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+
+			var exchange3 = ExchangeAPI.GetExchangeAPI("Kraken");
+
+			var symbols2 = await exchange3.GetMarketSymbolsAsync();
+
+			var books = await exchange3.GetOrderBookAsync("USDTGBP");
+		}
+
+		[TestMethod]
 		public void ExchangeGetCreateTest()
 		{
 			// make sure get exchange api calls serve up the same instance
