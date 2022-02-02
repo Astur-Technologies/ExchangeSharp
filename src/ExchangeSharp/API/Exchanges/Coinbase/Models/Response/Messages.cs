@@ -22,8 +22,6 @@ namespace ExchangeSharp.Coinbase
 
 	internal class Activate : BaseMessage
 	{
-		private ExchangeOrderResult exchangeOrderResult;
-
 		public Guid OrderId { get; set; }
 		public StopType OrderType { get; set; }
 		public decimal Size { get; set; }
@@ -52,7 +50,8 @@ namespace ExchangeSharp.Coinbase
 			MarketSymbol = ProductId,
 			IsBuy = Side == OrderSide.Buy,
 			Fees = null, // only TakerFeeRate is specified - no fees have been charged yet
-			TradeId = null // no trades have been made
+			TradeId = null, // no trades have been made
+			UpdateSequence = null, // unfortunately, the Activate event doesn't provide a sequence number
 		};
 	}
 
@@ -84,7 +83,8 @@ namespace ExchangeSharp.Coinbase
 			MarketSymbol = ProductId,
 			IsBuy = Side == OrderSide.Buy,
 			Fees = null, // only TakerFeeRate is specified - no fees have been charged yet
-			TradeId = null // not a trade msg
+			TradeId = null, // not a trade msg
+			UpdateSequence = Sequence,
 		};
 	}
 
@@ -116,7 +116,8 @@ namespace ExchangeSharp.Coinbase
 			MarketSymbol = ProductId,
 			IsBuy = Side == OrderSide.Buy,
 			Fees = null, // not specified here
-			TradeId = null // not a trade msg
+			TradeId = null, // not a trade msg
+			UpdateSequence = Sequence,
 		};
 	}
 
@@ -182,12 +183,14 @@ namespace ExchangeSharp.Coinbase
 			IsAmountFilledReversed = false, // the size here appears to be amount filled, no no need to reverse
 			Price = Price,
 			AveragePrice = Price, // not specified here
-			// OrderDate - not provided here. ideally would be null but ExchangeOrderResult.OrderDate
+			// OrderDate - not provided here. ideally would be null but ExchangeOrderResult.OrderDate is not nullable
 			CompletedDate = null, // order not necessarily fullly filled at this point
+			TradeDate = Time.ToDateTimeInvariant(),
 			MarketSymbol = ProductId,
 			IsBuy = Side == OrderSide.Buy,
 			Fees = (MakerFeeRate ?? TakerFeeRate) * Price * Size,
 			TradeId = TradeId.ToString(),
+			UpdateSequence = Sequence,
 		};
 	}
 
@@ -217,7 +220,8 @@ namespace ExchangeSharp.Coinbase
 			MarketSymbol = ProductId,
 			IsBuy = Side == OrderSide.Buy,
 			Fees = null, // not specified here
-			TradeId = null // not a trade msg
+			TradeId = null, // not a trade msg
+			UpdateSequence = Sequence,
 		};
 	}
 
@@ -249,7 +253,8 @@ namespace ExchangeSharp.Coinbase
 			MarketSymbol = ProductId,
 			IsBuy = Side == OrderSide.Buy,
 			Fees = null, // not specified here
-			TradeId = null // not a trade msg
+			TradeId = null, // not a trade msg
+			UpdateSequence = Sequence,
 		};
 	}
 

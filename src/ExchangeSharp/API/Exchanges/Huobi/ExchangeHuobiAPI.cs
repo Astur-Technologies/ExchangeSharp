@@ -251,6 +251,8 @@ namespace ExchangeSharp
 
                 if (token["status"] != null)
                 {
+					if (token["status"].ToStringLowerInvariant() == "error")
+						Logger.Error($"Error in {this.GetType()}.{nameof(OnGetTradesWebSocketAsync)}: {token.ToStringInvariant()}");
                     return;
                 }
                 else if (token["ping"] != null)
@@ -346,7 +348,7 @@ namespace ExchangeSharp
                 var ch = token["ch"].ToStringInvariant();
                 var sArray = ch.Split('.');
                 var marketSymbol = sArray[1].ToStringInvariant();
-                ExchangeOrderBook book = ExchangeAPIExtensions.ParseOrderBookFromJTokenArrays(token["tick"], maxCount: maxCount);
+                ExchangeOrderBook book = token["tick"].ParseOrderBookFromJTokenArrays();
                 book.MarketSymbol = marketSymbol;
                 callback(book);
             }, async (_socket) =>
@@ -433,7 +435,7 @@ namespace ExchangeSharp
       [7995, 0.88],
              */
             JToken obj = await MakeJsonRequestAsync<JToken>("/market/depth?symbol=" + marketSymbol + "&type=step0", BaseUrl, null);
-            return ExchangeAPIExtensions.ParseOrderBookFromJTokenArrays(obj["tick"], sequence: "ts", maxCount: maxCount);
+            return obj["tick"].ParseOrderBookFromJTokenArrays(sequence: "ts");
         }
 
         protected override async Task<IEnumerable<MarketCandle>> OnGetCandlesAsync(string marketSymbol, int periodSeconds, DateTime? startDate = null, DateTime? endDate = null, int? limit = null)

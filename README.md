@@ -1,5 +1,7 @@
 <img src='logo.png' width='600' alt="Project's logo" />
 
+[![Github Sponsorship](.github/github_sponsor_btn.svg)](https://github.com/sponsors/jjxtra)
+
 [![Build Status](https://dev.azure.com/DigitalRuby/DigitalRuby/_apis/build/status/jjxtra_ExchangeSharp?branchName=master)](https://dev.azure.com/DigitalRuby/DigitalRuby/_build/latest?definitionId=5&branchName=master) [![NuGet](https://img.shields.io/nuget/dt/DigitalRuby.ExchangeSharp.svg)][nuget]
 
 ## Overview
@@ -11,7 +13,7 @@ Feel free to visit the discord channel at https://discord.gg/sHCUHH3 and chat wi
 ### Features
 
 - Many exchanges supported with public, private and web socket API
-- Easy to use and well documented code and API
+- Easy to use code and API
 - Optional global market symbol normalization, since each exchange has their own way of doing market symbols
 - Runs anywhere .NET runs. (Windows, Mac, Linux, Containers, Serverless, iOS, Android, [etc.](https://docs.microsoft.com/en-us/dotnet/core/about))
 - Can be used from [many different C# platforms](https://github.com/dotnet/standard/blob/master/docs/versions/netstandard2.0.md#platform-support)
@@ -20,14 +22,14 @@ Feel free to visit the discord channel at https://discord.gg/sHCUHH3 and chat wi
 ### Exchanges
 
 The following cryptocurrency exchanges are supported:  
-(Web socket key: T = tickers, R = trades, B = order book, O = private orders)
+(Web socket key: T = tickers, R = trades, B = order book, O = private orders, U = user data)
 
 | Exchange Name  | Public REST | Private REST | Web Socket | Notes                                    |
 | -------------- | ----------- | ------------ | ---------- | ---------------------------------------- |
 | Aquanow        | wip         | x            |            |
-| Binance        | x           | x            | T R B      |
-| Binance Jersey | x           | x            | T R B      |
-| Binance.US     | x           | x            | T R B      |
+| Binance        | x           | x            | T R B U    |
+| Binance Jersey | x           | x            | T R B U    |
+| Binance.US     | x           | x            | T R B U    |
 | Binance DEX    |             |              | R          |
 | Bitbank        | x           | x            |            |
 | Bitfinex       | x           | x            | T R O      |
@@ -39,9 +41,11 @@ The following cryptocurrency exchanges are supported:
 | Bleutrade      | x           | x            |            |
 | BTSE           | x           | x            |            |
 | Bybit          | x           | x            | R          | Has public method for Websocket Positions
-| Coinbase       | x           | x            | T R        |
+| Coinbase       | x           | x            | T R U      |
+| Coinmate       | x           | x            |            |
 | Digifinex      | x           | x            | R B        |
 | FTX            | x           | x            | T          |
+| gate.io        | x           | x            |            |
 | Gemini         | x           | x            | T R B      |
 | HitBTC         | x           | x            | R          |
 | Huobi          | x           | x            | R B        |
@@ -51,7 +55,7 @@ The following cryptocurrency exchanges are supported:
 | Livecoin       | x           | x            |            |
 | NDAX           | x           | x            | T R        |
 | OKCoin         | x           | x            | R B        |
-| OKEx           | x           | x            | R B        |
+| OKEx           | x           | x            | T R B O    |
 | Poloniex       | x           | x            | T R B      |
 | YoBit          | x           | x            |            |
 | ZB.com         | wip         |              | R          |
@@ -62,7 +66,7 @@ The following cryptocurrency services are supported:
 
 Exchange constructors are private, to get access to an exchange in code use:
 
-`ExchangeAPI.GetExchangeAPI`.
+`ExchangeAPI.GetExchangeAPIAsync`.
 
 ### Installing the CLI
 
@@ -74,7 +78,7 @@ On Windows (or manually):
 
 - Download the [latest binaries](https://github.com/jjxtra/ExchangeSharp/releases/latest) for your OS.
 - Unzip it into a folder that is in your environment variable `PATH` (`ctrl` + `shift` + `pause|break` -> Environment Variables)
-- Use it from the your preferred command-line emulator (e.g. Powershell, cmd, etc.)
+- Use it from your preferred command-line emulator (e.g. Powershell, cmd, etc.)
 - `exchange-sharp --help` shows all available commands
 
 ### Notes
@@ -101,11 +105,11 @@ See [`WebSocket4NetClientWebSocket.cs`][websocket4net] for implementation detail
 
 #### dotnet CLI
 
-[`dotnet add package DigitalRuby.ExchangeSharp --version 0.8.2`][nuget]
+[`dotnet add package DigitalRuby.ExchangeSharp --version 0.9.2`][nuget]
 
 #### Package Manager on VS
 
-[`PM> Install-Package DigitalRuby.ExchangeSharp -Version 0.8.2`][nuget]
+[`PM> Install-Package DigitalRuby.ExchangeSharp -Version 0.9.2`][nuget]
 
 ### Examples
 
@@ -121,7 +125,7 @@ e.g.
 public static async Task Main(string[] args)
 {
     // create a web socket connection to Binance. Note you can Dispose the socket anytime to shut it down.
-    using var api = ExchangeAPI.GetExchangeAPI<ExchangeBinanceAPI>();
+    using var api = await ExchangeAPI.GetExchangeAPIAsync<ExchangeBinanceAPI>();
     // the web socket will handle disconnects and attempt to re-connect automatically.
     using var socket = await api.GetTickersWebSocket(tickers =>
     {
@@ -161,7 +165,7 @@ I'm happy to make customizations to the software for you and keep in private rep
 
 ### Donations Gratefully Accepted
 
-Believe it or not, donations are quite rare. I've posted publicly the total donation amounts below. If ExchangeSharp has helped you in anyway, please consider donating.
+Believe it or not, donations are quite rare. I've posted publicly the total donation amounts below. If ExchangeSharp has helped you in any way, please consider donating.
 
 [![Donate with Bitcoin](https://en.cryptobadges.io/badge/small/1GBz8ithHvTqeRZxkmpHx5kQ9wBXuSH8AG)](https://en.cryptobadges.io/donate/1GBz8ithHvTqeRZxkmpHx5kQ9wBXuSH8AG)
 

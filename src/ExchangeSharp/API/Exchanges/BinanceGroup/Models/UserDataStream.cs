@@ -54,7 +54,7 @@ namespace ExchangeSharp.BinanceGroup
 		[JsonProperty("N")]
 		public string CommissionAsset { get; set; }
 		[JsonProperty("T")]
-		public string TransactionTime { get; set; }
+		public long TransactionTime { get; set; }
 		[JsonProperty("t")]
 		public string TradeId { get; set; }
 		[JsonProperty("w")]
@@ -87,12 +87,14 @@ namespace ExchangeSharp.BinanceGroup
 					ClientOrderId = ClientOrderId,
 					Result = status,
 					ResultCode = CurrentOrderStatus,
-					Message = null, // can use for something in the future if needed
+					Message = OrderRejectReason, // can use for multiple things in the future if needed
 					Amount = CumulativeFilledQuantity,
 					Price = OrderPrice,
 					AveragePrice = CumulativeQuoteAssetTransactedQuantity / CumulativeFilledQuantity, // Average price can be found by doing Z divided by z.
 					OrderDate = CryptoUtility.UnixTimeStampToDateTimeMilliseconds(OrderCreationTime),
-					CompletedDate = status.IsCompleted() ? (DateTime?)CryptoUtility.UnixTimeStampToDateTimeMilliseconds(EventTime) : null,
+					CompletedDate = status.IsCompleted() ? (DateTime?)CryptoUtility.UnixTimeStampToDateTimeMilliseconds(TransactionTime) : null,
+					TradeDate = CryptoUtility.UnixTimeStampToDateTimeMilliseconds(TransactionTime),
+					UpdateSequence = EventTime, // in Binance, the sequence nymber is also the EventTime
 					MarketSymbol = Symbol,
 					// IsBuy is not provided here
 					Fees = CommissionAmount,

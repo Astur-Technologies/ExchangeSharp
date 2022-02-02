@@ -239,7 +239,6 @@ namespace ExchangeSharp
 			ExchangeOrderResult orderResult = new ExchangeOrderResult { OrderId = orderId };
 			orderResult.Result = ExchangeAPIOrderResult.Filled;
 			orderResult.Message = "";
-			orderResult.OrderDate = CryptoUtility.UnixTimeStampToDateTimeSeconds(order["time"].ConvertInvariant<double>());
 			orderResult.MarketSymbol = order["pair"].ToStringInvariant();
 			orderResult.IsBuy = (order["type"].ToStringInvariant() == "buy");
 			orderResult.Amount = order["vol"].ConvertInvariant<decimal>();
@@ -249,7 +248,9 @@ namespace ExchangeSharp
 			orderResult.TradeId = order["postxid"].ToStringInvariant(); //verify which is orderid & tradeid
 			orderResult.OrderId = order["ordertxid"].ToStringInvariant(); //verify which is orderid & tradeid
 			orderResult.AmountFilled = order["vol"].ConvertInvariant<decimal>();
-			orderResult.CompletedDate = CryptoUtility.UnixTimeStampToDateTimeSeconds(order["time"].ConvertInvariant<double>());
+			// orderResult.OrderDate - not provided here. ideally would be null but ExchangeOrderResult.OrderDate is not nullable
+			orderResult.CompletedDate = null; // order not necessarily fully filled at this point
+			orderResult.TradeDate = CryptoUtility.UnixTimeStampToDateTimeSeconds(order["time"].ConvertInvariant<double>());
 
 			string[] pairs = (await ExchangeMarketSymbolToGlobalMarketSymbolAsync(order["pair"].ToStringInvariant())).Split('-');
 			orderResult.FeesCurrency = pairs[1];
@@ -407,7 +408,7 @@ namespace ExchangeSharp
 		}
 
 		protected internal override async Task<IEnumerable<ExchangeMarket>> OnGetMarketSymbolsMetadataAsync()
-		{ 
+		{
 			var markets = new List<ExchangeMarket>();
 			JToken allPairs = await MakeJsonRequestAsync<JToken>("/0/public/AssetPairs");
 			var res = (from prop in allPairs.Children<JProperty>() select prop).ToArray();
@@ -455,7 +456,8 @@ namespace ExchangeSharp
 
 			return new ExchangeWithdrawalResponse
 			{
-				Id = result["refid"].ToString()
+				Id = result["refid"].ToString(),
+				Fee = result.Value<decimal?>("fee")
 			};
 		}
 
@@ -544,7 +546,7 @@ namespace ExchangeSharp
 		protected override async Task<ExchangeOrderBook> OnGetOrderBookAsync(string marketSymbol, int maxCount = 100)
 		{
 			JToken obj = await MakeJsonRequestAsync<JToken>("/0/public/Depth?pair=" + marketSymbol + "&count=" + maxCount);
-			return ExchangeAPIExtensions.ParseOrderBookFromJTokenArrays(obj[marketSymbol], maxCount: maxCount);
+			return obj[marketSymbol].ParseOrderBookFromJTokenArrays();
 		}
 
 		protected override async Task<IEnumerable<ExchangeTrade>> OnGetRecentTradesAsync(string marketSymbol, int? limit = null)

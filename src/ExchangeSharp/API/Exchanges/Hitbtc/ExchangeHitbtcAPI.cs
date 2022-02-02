@@ -160,7 +160,7 @@ namespace ExchangeSharp
             JToken obj = await MakeJsonRequestAsync<JToken>("/public/candles/" + marketSymbol + "?period=" + periodString + "&limit=" + limit);
             foreach (JToken token in obj)
             {
-                candles.Add(this.ParseCandle(token, marketSymbol, periodSeconds, "open", "max", "min", "close", "timestamp", TimestampType.Iso8601, "volume", "volumeQuote"));
+                candles.Add(this.ParseCandle(token, marketSymbol, periodSeconds, "open", "max", "min", "close", "timestamp", TimestampType.Iso8601UTC, "volume", "volumeQuote"));
             }
             return candles;
         }
@@ -186,7 +186,7 @@ namespace ExchangeSharp
         protected override async Task<ExchangeOrderBook> OnGetOrderBookAsync(string marketSymbol, int maxCount = 100)
         {
             JToken token = await MakeJsonRequestAsync<JToken>("/public/orderbook/" + marketSymbol + "?limit=" + maxCount.ToStringInvariant());
-            return ExchangeAPIExtensions.ParseOrderBookFromJTokenDictionaries(token, asks: "ask", bids: "bid", amount: "size", maxCount: maxCount);
+            return token.ParseOrderBookFromJTokenDictionaries(asks: "ask", bids: "bid", amount: "size");
         }
 
         protected override async Task OnGetHistoricalTradesAsync(Func<IEnumerable<ExchangeTrade>, bool> callback, string marketSymbol, DateTime? startDate = null, DateTime? endDate = null, int? limit = null)
@@ -195,11 +195,11 @@ namespace ExchangeSharp
 			// TODO: Can't get Hitbtc to return other than the last 50 trades even though their API says it should (by orderid or timestamp). When passing either of these parms, it still returns the last 50
 			// So until there is an update, that's what we'll go with
 			// UPDATE: 2020/01/19 https://api.hitbtc.com/ GET /api/2/public/trades/{symbol} limit default: 100 max value:1000
-			// 
+			//
 			//var maxRequestLimit = 1000; //hard coded for now, should add limit as an argument
-			var maxRequestLimit = (limit == null || limit < 1 || limit > 1000) ? 1000 : (int)limit;  
+			var maxRequestLimit = (limit == null || limit < 1 || limit > 1000) ? 1000 : (int)limit;
             //note that sort must come after limit, else returns default 100 trades, sort default is DESC
-			JToken obj = await MakeJsonRequestAsync<JToken>("/public/trades/" + marketSymbol + "?limit=" + maxRequestLimit + "?sort=DESC"); 
+			JToken obj = await MakeJsonRequestAsync<JToken>("/public/trades/" + marketSymbol + "?limit=" + maxRequestLimit + "?sort=DESC");
 			//JToken obj = await MakeJsonRequestAsync<JToken>("/public/trades/" + marketSymbol);
 			if (obj.HasValues)
             {
@@ -575,7 +575,7 @@ namespace ExchangeSharp
 			});
 			ExchangeTrade parseTrade(JToken token) => token.ParseTrade(amountKey: "quantity",
 				priceKey: "price", typeKey: "side", timestampKey: "timestamp",
-				timestampType: TimestampType.Iso8601, idKey: "id");
+				timestampType: TimestampType.Iso8601UTC, idKey: "id");
 		}
 
 		#endregion
@@ -617,13 +617,13 @@ namespace ExchangeSharp
 		private async Task<ExchangeTicker> ParseTickerAsync(JToken token, string symbol)
         {
             // [ {"ask": "0.050043","bid": "0.050042","last": "0.050042","open": "0.047800","low": "0.047052","high": "0.051679","volume": "36456.720","volumeQuote": "1782.625000","timestamp": "2017-05-12T14:57:19.999Z","symbol": "ETHBTC"} ]
-            return await this.ParseTickerAsync(token, symbol, "ask", "bid", "last", "volume", "volumeQuote", "timestamp", TimestampType.Iso8601);
+            return await this.ParseTickerAsync(token, symbol, "ask", "bid", "last", "volume", "volumeQuote", "timestamp", TimestampType.Iso8601UTC);
         }
 
         private ExchangeTrade ParseExchangeTrade(JToken token)
         {
             // [ { "id": 9533117, "price": "0.046001", "quantity": "0.220", "side": "sell", "timestamp": "2017-04-14T12:18:40.426Z" }, ... ]
-            return token.ParseTrade("quantity", "price", "side", "timestamp", TimestampType.Iso8601, "id");
+            return token.ParseTrade("quantity", "price", "side", "timestamp", TimestampType.Iso8601UTC, "id");
         }
 
         private ExchangeOrderResult ParseCompletedOrder(JToken token)

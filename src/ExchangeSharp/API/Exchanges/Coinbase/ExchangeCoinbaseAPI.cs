@@ -65,7 +65,9 @@ namespace ExchangeSharp
 				Fees = fees,
 				AveragePrice = price,
 				IsBuy = (result["side"].ToStringInvariant() == "buy"),
-				OrderDate = result["created_at"].ToDateTimeInvariant(),
+				// OrderDate - not provided here. ideally would be null but ExchangeOrderResult.OrderDate is not nullable
+				CompletedDate = null, // order not necessarily fully filled at this point
+				TradeDate = result["created_at"].ToDateTimeInvariant(), // even though it is named "created_at", the documentation says that it is the: timestamp of fill
 				MarketSymbol = symbol,
 				OrderId = result["order_id"].ToStringInvariant(),
 			};
@@ -197,7 +199,8 @@ namespace ExchangeSharp
 					IsActive = string.Equals(product["status"].ToStringInvariant(), "online", StringComparison.OrdinalIgnoreCase),
 					MinTradeSize = product["base_min_size"].ConvertInvariant<decimal>(),
 					MaxTradeSize = product["base_max_size"].ConvertInvariant<decimal>(),
-					PriceStepSize = product["quote_increment"].ConvertInvariant<decimal>()
+					PriceStepSize = product["quote_increment"].ConvertInvariant<decimal>(),
+					QuantityStepSize = product["base_increment"].ConvertInvariant<decimal>(),
 				};
 				markets.Add(market);
 			}
@@ -233,7 +236,7 @@ namespace ExchangeSharp
 		protected override async Task<ExchangeTicker> OnGetTickerAsync(string marketSymbol)
 		{
 			JToken ticker = await MakeJsonRequestAsync<JToken>("/products/" + marketSymbol + "/ticker");
-			return await this.ParseTickerAsync(ticker, marketSymbol, "ask", "bid", "price", "volume", null, "time", TimestampType.Iso8601);
+			return await this.ParseTickerAsync(ticker, marketSymbol, "ask", "bid", "price", "volume", null, "time", TimestampType.Iso8601UTC);
 		}
 
 		protected override async Task<ExchangeDepositDetails> OnGetDepositAddressAsync(string symbol, bool forceRegenerate = false)
@@ -372,7 +375,7 @@ namespace ExchangeSharp
 				JToken token = JToken.Parse(msg.ToStringFromUTF8());
 				if (token["type"].ToStringInvariant() == "ticker")
 				{
-					ExchangeTicker ticker = await this.ParseTickerAsync(token, token["product_id"].ToStringInvariant(), "best_ask", "best_bid", "price", "volume_24h", null, "time", TimestampType.Iso8601);
+					ExchangeTicker ticker = await this.ParseTickerAsync(token, token["product_id"].ToStringInvariant(), "best_ask", "best_bid", "price", "volume_24h", null, "time", TimestampType.Iso8601UTC);
 					callback(new List<KeyValuePair<string, ExchangeTicker>>() { new KeyValuePair<string, ExchangeTicker>(token["product_id"].ToStringInvariant(), ticker) });
 				}
 			}, async (_socket) =>
@@ -435,7 +438,7 @@ namespace ExchangeSharp
 
 		private ExchangeTrade ParseTradeWebSocket(JToken token)
 		{
-			return token.ParseTradeCoinbase("size", "price", "side", "time", TimestampType.Iso8601, "trade_id");
+			return token.ParseTradeCoinbase("size", "price", "side", "time", TimestampType.Iso8601UTC, "trade_id");
 		}
 
 		protected override async Task<IWebSocket> OnUserDataWebSocketAsync(Action<object> callback)
@@ -553,7 +556,7 @@ namespace ExchangeSharp
 			{
 				Callback = callback,
 				EndDate = endDate,
-				ParseFunction = (JToken token) => token.ParseTrade("size", "price", "side", "time", TimestampType.Iso8601, "trade_id"),
+				ParseFunction = (JToken token) => token.ParseTrade("size", "price", "side", "time", TimestampType.Iso8601UTC, "trade_id"),
 				StartDate = startDate,
 				MarketSymbol = marketSymbol,
 				Url = "/products/[marketSymbol]/trades",
@@ -575,7 +578,7 @@ namespace ExchangeSharp
 			List<ExchangeTrade> tradeList = new List<ExchangeTrade>();
 			foreach (JToken trade in trades)
 			{
-				tradeList.Add(trade.ParseTrade("size", "price", "side", "time", TimestampType.Iso8601, "trade_id"));
+				tradeList.Add(trade.ParseTrade("size", "price", "side", "time", TimestampType.Iso8601UTC, "trade_id"));
 			}
 			return tradeList;
 		}
@@ -584,7 +587,7 @@ namespace ExchangeSharp
 		{
 			string url = "/products/" + marketSymbol.ToUpperInvariant() + "/book?level=2";
 			JToken token = await MakeJsonRequestAsync<JToken>(url);
-			return ExchangeAPIExtensions.ParseOrderBookFromJTokenArrays(token, maxCount: maxCount);
+			return token.ParseOrderBookFromJTokenArrays();
 		}
 
 		protected override async Task<IEnumerable<MarketCandle>> OnGetCandlesAsync(string marketSymbol, int periodSeconds, DateTime? startDate = null, DateTime? endDate = null, int? limit = null)
@@ -650,6 +653,26 @@ namespace ExchangeSharp
 			return amounts;
 		}
 
+		protected override async Task<Dictionary<string, decimal>> OnGetFeesAsync()
+		{
+			var symbols = await OnGetMarketSymbolsAsync();
+
+			Dictionary<string, decimal> fees = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+
+			JObject token = await MakeJsonRequestAsync<JObject>("/fees", null, await GetNoncePayloadAsync(), "GET");
+			/*
+			 * We can chose between maker and taker fee, but currently ExchangeSharp only supports 1 fee rate per symbol.
+			 * Here, we choose taker fee, which are usually higher
+			*/
+			decimal makerRate = token["taker_fee_rate"].Value<decimal>(); //percentage between 0 and 1
+
+			fees = symbols
+				.Select(symbol => new KeyValuePair<string, decimal>(symbol, makerRate))
+				.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+			return fees;
+		}
+
 		protected override async Task<ExchangeWithdrawalResponse> OnWithdrawAsync(ExchangeWithdrawalRequest request)
 		{
 			var nonce = await GenerateNonceAsync();
@@ -668,10 +691,12 @@ namespace ExchangeSharp
 			}
 
 			var result = await MakeJsonRequestAsync<WithdrawalResult>("/withdrawals/crypto", null, payload, "POST");
+			var feeParsed = decimal.TryParse(result.Fee, out var fee);
 
 			return new ExchangeWithdrawalResponse
 			{
-				Id = result.Id
+				Id = result.Id,
+				Fee = feeParsed ? fee : (decimal?)null
 			};
 		}
 
@@ -784,7 +809,9 @@ namespace ExchangeSharp
 
 		protected override async Task OnCancelOrderAsync(string orderId, string marketSymbol = null)
 		{
-			await MakeJsonRequestAsync<JArray>("orders/" + orderId, null, await GetNoncePayloadAsync(), "DELETE");
+			var jToken = await MakeJsonRequestAsync<JToken>("orders/" + orderId, null, await GetNoncePayloadAsync(), "DELETE");
+			if (jToken.ToStringInvariant() != orderId)
+				throw new APIException($"Cancelled {jToken.ToStringInvariant()} when trying to cancel {orderId}");
 		}
 	}
 

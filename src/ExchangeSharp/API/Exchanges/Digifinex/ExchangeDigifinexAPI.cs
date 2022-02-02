@@ -211,7 +211,7 @@ namespace ExchangeSharp
 		protected override async Task<ExchangeOrderBook> OnGetOrderBookAsync(string marketSymbol, int maxCount = 100)
 		{
 			JToken obj = await MakeJsonRequestAsync<JToken>($"/order_book?symbol={marketSymbol}&limit={maxCount}");
-			var result = ExchangeAPIExtensions.ParseOrderBookFromJTokenArrays(obj, sequence: "date", maxCount: maxCount);
+			var result = obj.ParseOrderBookFromJTokenArrays(sequence: "date");
 			result.LastUpdatedUtc = CryptoUtility.UnixTimeStampToDateTimeSeconds(obj["date"].ConvertInvariant<long>());
 			result.MarketSymbol = marketSymbol;
 			return result;
@@ -356,7 +356,9 @@ namespace ExchangeSharp
 				AmountFilled = x["amount"].ConvertInvariant<decimal>(),
 				Fees = x["fee"].ConvertInvariant<decimal>(),
 				FeesCurrency = x["fee_currency"].ToStringInvariant(),
-				CompletedDate = CryptoUtility.UnixTimeStampToDateTimeSeconds(x["timestamp"].ConvertInvariant<long>()),
+				// OrderDate - not provided here. ideally would be null but ExchangeOrderResult.OrderDate is not nullable
+				CompletedDate = null, // order not necessarily fully filled at this point
+				TradeDate = CryptoUtility.UnixTimeStampToDateTimeSeconds(x["timestamp"].ConvertInvariant<long>()),
 				IsBuy = x["side"].ToStringLowerInvariant() == "buy",
 				Result = ExchangeAPIOrderResult.Unknown,
 			});

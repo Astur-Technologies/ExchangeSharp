@@ -14,6 +14,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using ExchangeSharp.Kraken;
 using ExchangeSharp.BinanceGroup;
@@ -22,6 +23,7 @@ using ExchangeSharp.Coinbase;
 using ExchangeSharp.KuCoin;
 using Newtonsoft.Json.Linq;
 using ExchangeSharp.NDAX;
+using ExchangeSharp.API.Exchanges.FTX.Models;
 
 namespace ExchangeSharp
 {
@@ -52,21 +54,6 @@ namespace ExchangeSharp
 			ConcurrentDictionary<string, ExchangeOrderBook> fullBooks = new ConcurrentDictionary<string, ExchangeOrderBook>();
 			Dictionary<string, Queue<ExchangeOrderBook>> partialOrderBookQueues = new Dictionary<string, Queue<ExchangeOrderBook>>();
 
-			static void applyDelta(SortedDictionary<decimal, ExchangeOrderPrice> deltaValues, SortedDictionary<decimal, ExchangeOrderPrice> bookToEdit)
-			{
-				foreach (ExchangeOrderPrice record in deltaValues.Values)
-				{
-					if (record.Amount <= 0 || record.Price <= 0)
-					{
-						bookToEdit.Remove(record.Price);
-					}
-					else
-					{
-						bookToEdit[record.Price] = record;
-					}
-				}
-			}
-
 			static void updateOrderBook(ExchangeOrderBook fullOrderBook, ExchangeOrderBook freshBook)
 			{
 				lock (fullOrderBook)
@@ -74,9 +61,7 @@ namespace ExchangeSharp
 					// update deltas as long as the full book is at or before the delta timestamp
 					if (fullOrderBook.SequenceId <= freshBook.SequenceId)
 					{
-						applyDelta(freshBook.Asks, fullOrderBook.Asks);
-						applyDelta(freshBook.Bids, fullOrderBook.Bids);
-						fullOrderBook.SequenceId = freshBook.SequenceId;
+						fullOrderBook.ApplyUpdates(freshBook);
 					}
 				}
 			}
@@ -172,7 +157,24 @@ namespace ExchangeSharp
 				}
 
 				fullOrderBook.LastUpdatedUtc = CryptoUtility.UtcNow;
+				trimFullOrderBook(fullOrderBook);
 				callback(fullOrderBook);
+			}
+
+			void trimFullOrderBook(ExchangeOrderBook fBook)
+			{
+				var asks = fBook.Asks.Take(maxCount).ToList();
+				var bids = fBook.Bids.Take(maxCount).ToList();
+				fBook.Asks.Clear();
+				fBook.Bids.Clear();
+				foreach (var kvp in asks)
+				{
+					fBook.Asks.Add(kvp.Key, kvp.Value);
+				}
+				foreach (var kvp in bids)
+				{
+					fBook.Bids.Add(kvp.Key, kvp.Value);
+				}
 			}
 
 			IWebSocket socket = await api.GetDeltaOrderBookWebSocketAsync(async (b) =>
@@ -352,36 +354,26 @@ namespace ExchangeSharp
 		/// <param name="token">Token</param>
 		/// <param name="asks">Asks key</param>
 		/// <param name="bids">Bids key</param>
-		/// <param name="maxCount">Max count</param>
 		/// <returns>Order book</returns>
 		internal static ExchangeOrderBook ParseOrderBookFromJTokenArrays
 		(
 			this JToken token,
 			string asks = "asks",
 			string bids = "bids",
-			string sequence = "ts",
-			int maxCount = 100
+			string sequence = "ts"
 		)
 		{
 			var book = new ExchangeOrderBook { SequenceId = token[sequence].ConvertInvariant<long>() };
-			foreach (JArray array in token[asks])
+			foreach (var array in token[asks])
 			{
 				var depth = new ExchangeOrderPrice { Price = array[0].ConvertInvariant<decimal>(), Amount = array[1].ConvertInvariant<decimal>() };
 				book.Asks[depth.Price] = depth;
-				if (book.Asks.Count == maxCount)
-				{
-					break;
-				}
 			}
 
-			foreach (JArray array in token[bids])
+			foreach (var array in token[bids])
 			{
 				var depth = new ExchangeOrderPrice { Price = array[0].ConvertInvariant<decimal>(), Amount = array[1].ConvertInvariant<decimal>() };
 				book.Bids[depth.Price] = depth;
-				if (book.Bids.Count == maxCount)
-				{
-					break;
-				}
 			}
 
 			return book;
@@ -395,7 +387,6 @@ namespace ExchangeSharp
 		/// <param name="price">Price key</param>
 		/// <param name="amount">Quantity key</param>
 		/// <param name="sequence">Sequence key</param>
-		/// <param name="maxCount">Max count</param>
 		/// <returns>Order book</returns>
 		internal static ExchangeOrderBook ParseOrderBookFromJTokenDictionaries
 		(
@@ -404,8 +395,7 @@ namespace ExchangeSharp
 			string bids = "bids",
 			string price = "price",
 			string amount = "amount",
-			string sequence = "ts",
-			int maxCount = 100
+			string sequence = "ts"
 		)
 		{
 			var book = new ExchangeOrderBook { SequenceId = token[sequence].ConvertInvariant<long>() };
@@ -413,20 +403,12 @@ namespace ExchangeSharp
 			{
 				var depth = new ExchangeOrderPrice { Price = ask[price].ConvertInvariant<decimal>(), Amount = ask[amount].ConvertInvariant<decimal>() };
 				book.Asks[depth.Price] = depth;
-				if (book.Asks.Count == maxCount)
-				{
-					break;
-				}
 			}
 
 			foreach (JToken bid in token[bids])
 			{
 				var depth = new ExchangeOrderPrice { Price = bid[price].ConvertInvariant<decimal>(), Amount = bid[amount].ConvertInvariant<decimal>() };
 				book.Bids[depth.Price] = depth;
-				if (book.Bids.Count == maxCount)
-				{
-					break;
-				}
 			}
 
 			return book;
@@ -535,7 +517,7 @@ namespace ExchangeSharp
 		/// <param name="token">Token</param>
 		/// <param name="amountKey">Amount key</param>
 		/// <param name="priceKey">Price key</param>
-		/// <param name="typeKey">Type key</param>
+		/// <param name="typeKey">Type key (aka Side - Buy/Sell)</param>
 		/// <param name="timestampKey">Timestamp key</param>
 		/// <param name="timestampType">Timestamp type</param>
 		/// <param name="idKey">Id key</param>
@@ -588,6 +570,15 @@ namespace ExchangeSharp
 				timestampKey, timestampType, idKey, typeKeyIsBuyValue);
 			trade.MakerOrderId = (Guid)token["maker_order_id"];
 			trade.TakerOrderId = (Guid)token["taker_order_id"];
+			return trade;
+		}
+
+		internal static ExchangeTrade ParseTradeFTX(this JToken token, object amountKey, object priceKey, object typeKey,
+			object timestampKey, TimestampType timestampType, object idKey, string typeKeyIsBuyValue = "buy")
+		{
+			var trade = ParseTradeComponents<FTXTrade>(token, amountKey, priceKey, typeKey,
+				timestampKey, timestampType, idKey, typeKeyIsBuyValue);
+			trade.IsLiquidationOrder = ((bool)token["liquidation"]);
 			return trade;
 		}
 
@@ -744,7 +735,7 @@ namespace ExchangeSharp
 			{
 				candle.WeightedAverage = token[weightedAverageKey].ConvertInvariant<decimal>();
 			}
-			if( countKey != null)	
+			if( countKey != null)
 			{
 				candle.Count = token[countKey].ConvertInvariant<int>();
 			}

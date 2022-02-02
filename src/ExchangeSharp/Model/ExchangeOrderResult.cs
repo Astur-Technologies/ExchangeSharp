@@ -88,9 +88,18 @@ namespace ExchangeSharp
         /// <summary>The id of the trade if this is only one trade out of the order.</summary>
         public string TradeId { get; set; }
 
-        /// <summary>Append another order to this order - order id and type must match</summary>
-        /// <param name="other">Order to append</param>
-        public void AppendOrderWithOrder(ExchangeOrderResult other)
+		/// <summary>datetime in UTC of the trade. Null if not a trade.</summary>
+		public DateTime? TradeDate { get; set; }
+
+		/// <summary>
+		/// sequence that the order update was sent from the server, usually used to keep updates in order or for debugging purposes.
+		/// Not all exchanges provide this value, so it may be null.
+		/// </summary>
+		public long? UpdateSequence { get; set; }
+
+		/// <summary>Append another order to this order - order id and type must match</summary>
+		/// <param name="other">Order to append</param>
+		public void AppendOrderWithOrder(ExchangeOrderResult other)
         {
             if ((OrderId != null) && (MarketSymbol != null) && ((OrderId != other.OrderId) || (IsBuy != other.IsBuy) || (MarketSymbol != other.MarketSymbol)))
             {

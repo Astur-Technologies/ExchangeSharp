@@ -14,6 +14,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 using ExchangeSharp;
@@ -37,7 +38,7 @@ namespace ExchangeSharpTests
         {
             Dictionary<string, string[]> allSymbols = new Dictionary<string, string[]>();
             List<Task> tasks = new List<Task>();
-            foreach (ExchangeAPI api in ExchangeAPI.GetExchangeAPIs())
+            foreach (ExchangeAPI api in await ExchangeAPI.GetExchangeAPIsAsync())
             {
                 tasks.Add(Task.Run(async () =>
                 {
@@ -63,22 +64,22 @@ namespace ExchangeSharpTests
         }
 
 		[TestMethod]
-		public void ExchangeGetCreateTest()
+		public async Task ExchangeGetCreateTest()
 		{
 			// make sure get exchange api calls serve up the same instance
-			var ex1 = ExchangeAPI.GetExchangeAPI<ExchangeGeminiAPI>();
-			var ex2 = ExchangeAPI.GetExchangeAPI(ExchangeName.Gemini);
+			var ex1 = await ExchangeAPI.GetExchangeAPIAsync<ExchangeGeminiAPI>();
+			var ex2 = await ExchangeAPI.GetExchangeAPIAsync(ExchangeName.Gemini);
 			Assert.AreSame(ex1, ex2);
 			Assert.IsInstanceOfType(ex2, typeof(ExchangeGeminiAPI));
 
 			// make sure create exchange serves up new instances
-			var ex3 = ExchangeAPI.CreateExchangeAPI<ExchangeGeminiAPI>();
+			var ex3 = await ExchangeAPI.CreateExchangeAPIAsync<ExchangeGeminiAPI>();
 			Assert.AreNotSame(ex3, ex2);
 
 			// make sure a bad exchange name throws correct exception
-			Assert.ThrowsException<ApplicationException>(() =>
+			await Assert.ThrowsExceptionAsync<ApplicationException>(() =>
 			{
-				ExchangeAPI.GetExchangeAPI("SirExchangeNotAppearingInThisFilm");
+				return ExchangeAPI.GetExchangeAPIAsync("SirExchangeNotAppearingInThisFilm");
 			});
 		}
 
@@ -86,21 +87,23 @@ namespace ExchangeSharpTests
         public async Task GlobalSymbolTest()
         {
             // if tests fail, uncomment this and it will save a new test file
-            // string allSymbolsJson = GetAllSymbolsJsonAsync().Sync(); System.IO.File.WriteAllText("TestData/AllSymbols.json", allSymbolsJson);
+            // string allSymbolsJson = await GetAllSymbolsJsonAsync(); System.IO.File.WriteAllText("TestData/AllSymbols.json", allSymbolsJson);
 
             string globalMarketSymbol = "ETH-BTC"; //1 ETH is worth 0.0192 BTC...
             string globalMarketSymbolAlt = "BTC-KRW"; // WTF Bitthumb... //1 BTC worth 9,783,000 won
             Dictionary<string, string[]> allSymbols = JsonConvert.DeserializeObject<Dictionary<string, string[]>>(System.IO.File.ReadAllText("TestData/AllSymbols.json"));
 
             // sanity test that all exchanges return the same global symbol when converted back and forth
-            foreach (IExchangeAPI api in ExchangeAPI.GetExchangeAPIs())
+            foreach (IExchangeAPI api in await ExchangeAPI.GetExchangeAPIsAsync())
             {
                 try
                 {
                     if (api is ExchangeUfoDexAPI || api is ExchangeOKExAPI || api is ExchangeHitBTCAPI || api is ExchangeKuCoinAPI ||
                         api is ExchangeOKCoinAPI || api is ExchangeDigifinexAPI || api is ExchangeNDAXAPI || api is ExchangeBL3PAPI ||
 						api is ExchangeBinanceUSAPI || api is ExchangeBinanceJerseyAPI || api is ExchangeBinanceDEXAPI ||
-						api is ExchangeBitMEXAPI || api is ExchangeBTSEAPI || api is ExchangeBybitAPI)
+						api is ExchangeBitMEXAPI || api is ExchangeBTSEAPI || api is ExchangeBybitAPI ||
+						api is ExchangeAquanowAPI || api is ExchangeBitfinexAPI || api is ExchangeBittrexAPI ||
+						api is ExchangeFTXAPI || api is ExchangeFTXUSAPI || api is ExchangeGateIoAPI || api is ExchangeCoinmateAPI)
                     {
                         // WIP
                         continue;
@@ -146,5 +149,52 @@ namespace ExchangeSharpTests
                 }
             }
         }
-    }
+
+		[TestMethod]
+		public async Task TradesWebsocketTest()
+		{
+			foreach (IExchangeAPI api in await ExchangeAPI.GetExchangeAPIsAsync())
+			{
+
+				if (api is ExchangeBinanceDEXAPI // volume too low
+					|| api is ExchangeBinanceJerseyAPI // ceased operations
+					|| api is ExchangeBittrexAPI // uses SignalR
+					|| api is ExchangeBL3PAPI // volume too low
+					|| api is ExchangeLivecoinAPI // defunct
+					|| api is ExchangeOKCoinAPI // volume appears to be too low
+					) { continue; }
+				//if (api is ExchangeKrakenAPI)
+				try
+				{
+					var delayCTS = new CancellationTokenSource();
+					var marketSymbols = await api.GetMarketSymbolsAsync();
+					string testSymbol = null;
+					if (api is ExchangeKrakenAPI) testSymbol = "XBTUSD";
+					if (testSymbol == null) testSymbol = marketSymbols.Where(s => // usually highest volume so we're not waiting around here
+					(s.ToUpper().Contains("BTC") || s.ToUpper().Contains("XBT"))
+					&& s.ToUpper().Contains("USD")
+					&& !(s.ToUpper().Contains("TBTC") || s.ToUpper().Contains("WBTC")
+						|| s.ToUpper().Contains("NHBTC") || s.ToUpper().Contains("BTC3L")
+						|| s.ToUpper().Contains("USDC") || s.ToUpper().Contains("SUSD")
+						|| s.ToUpper().Contains("BTC-TUSD")))
+					.FirstOrDefault();
+					if (testSymbol == null) testSymbol = marketSymbols.First();
+					bool thisExchangePassed = false;
+					using (var socket = await api.GetTradesWebSocketAsync(async kvp =>
+					{
+						thisExchangePassed = true;
+						delayCTS.Cancel(); // msg received. this exchange passes
+					}, testSymbol))
+					{
+						socket.Disconnected += async s => Assert.Fail($"disconnected by exchange {api.GetType().Name}");
+						await Task.Delay(100000, delayCTS.Token);
+						if (!thisExchangePassed) Assert.Fail($"No msgs recieved after 100 seconds for exchange {api.GetType().Name}");
+					}
+				}
+				catch (NotImplementedException)	{ } // no need to test exchanges where trades websocket is not implemented
+				catch (TaskCanceledException) { } // if the delay task is cancelled
+				catch (Exception ex) { Assert.Fail($"For exchange {api.GetType().Name}, encountered exception {ex}"); }
+			}
+		}
+	}
 }

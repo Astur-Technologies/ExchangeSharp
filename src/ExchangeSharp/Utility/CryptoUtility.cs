@@ -37,10 +37,12 @@ namespace ExchangeSharp
         internal static readonly DateTime UnixEpoch = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
         internal static readonly DateTime UnixEpochLocal = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Local);
         internal static readonly Encoding Utf8EncodingNoPrefix = new UTF8Encoding(false, true);
+		static string koreanZoneId = "Korea Standard Time";
+		static TimeZoneInfo koreaZone = TimeZoneInfo.FindSystemTimeZoneById(koreanZoneId);
 
-        private static Func<DateTime> utcNowFunc = UtcNowFuncImpl;
+		private static Func<DateTime> utcNowFunc = UtcNowFuncImpl;
 
-        private static DateTime UtcNowFuncImpl()
+		private static DateTime UtcNowFuncImpl()
         {
             // this is the only place in the code that DateTime.UtcNow is allowed. DateTime.UtcNow and DateTime.Now should not exist anywhere else in the code.
             return DateTime.UtcNow;
@@ -181,13 +183,19 @@ namespace ExchangeSharp
             }
         }
 
+		public enum SourceTimeZone
+		{
+			/// <summary> time zone is specifically specified in string </summary>
+			AsSpecified,
+			Local, Korea, UTC
+		}
         /// <summary>
-        /// Convert a DateTime and set the kind to UTC using the DateTimeKind property.
+        /// Convert object to a UTC DateTime
         /// </summary>
         /// <param name="obj">Object to convert</param>
         /// <param name="defaultValue">Default value if no conversion is possible</param>
-        /// <returns>DateTime with DateTimeKind kind or defaultValue if no conversion possible</returns>
-        public static DateTime ToDateTimeInvariant(this object obj, DateTime defaultValue = default)
+        /// <returns>DateTime in UTC or defaultValue if no conversion possible</returns>
+        public static DateTime ToDateTimeInvariant(this object obj, SourceTimeZone sourceTimeZone = SourceTimeZone.UTC, DateTime defaultValue = default)
         {
             if (obj == null)
             {
@@ -196,11 +204,24 @@ namespace ExchangeSharp
             JValue? jValue = obj as JValue;
             if (jValue != null && jValue.Value == null)
             {
+				Logger.Error("Failed parsing of datetime - setting to default value");
                 return defaultValue;
             }
             DateTime dt = (DateTime)Convert.ChangeType(jValue == null ? obj : jValue.Value, typeof(DateTime), CultureInfo.InvariantCulture);
-            return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
-        }
+			switch (sourceTimeZone)
+			{
+				case SourceTimeZone.AsSpecified:
+					throw new NotImplementedException(); // TODO: implement this when needed
+				case SourceTimeZone.Local:
+					return DateTime.SpecifyKind(dt, DateTimeKind.Local).ToUniversalTime(); // convert to UTC
+				case SourceTimeZone.Korea:
+					return TimeZoneInfo.ConvertTime(dt, koreaZone, TimeZoneInfo.Utc); // convert to UTC
+				case SourceTimeZone.UTC:
+					return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+				default:
+					throw new NotImplementedException($"Unexpected {nameof(sourceTimeZone)}: {sourceTimeZone}");
+			}
+		}
 
         /// <summary>
         /// Convert an object to another type using invariant culture. Consider using the string or DateTime conversions if you are dealing with those types.
@@ -695,10 +716,16 @@ namespace ExchangeSharp
 
             switch (type)
             {
-                case TimestampType.Iso8601:
-                    return value.ToDateTimeInvariant();
+				case TimestampType.Iso8601Local:
+					return value.ToDateTimeInvariant(SourceTimeZone.Local);
 
-                case TimestampType.UnixNanoseconds:
+				case TimestampType.Iso8601Korea:
+					return value.ToDateTimeInvariant(SourceTimeZone.Korea);
+
+				case TimestampType.Iso8601UTC:
+					return value.ToDateTimeInvariant(SourceTimeZone.UTC);
+
+				case TimestampType.UnixNanoseconds:
                     return UnixTimeStampToDateTimeNanoseconds(value.ConvertInvariant<long>());
 
 				case TimestampType.UnixMicroeconds:
@@ -1137,8 +1164,9 @@ namespace ExchangeSharp
         /// Convert seconds to a period string, i.e. 5s, 1m, 2h, 3d, 1w, 1M, etc.
         /// </summary>
         /// <param name="seconds">Seconds. Use 60 for minute, 3600 for hour, 3600*24 for day, 3600*24*30 for month.</param>
+        /// <param name="capitalAfterMinute">Capitalize all letters after m, i.e. 5s, 1m, 30m, 1H, 2H, 3D, 1W, 1M, etc.</param>
         /// <returns>Period string</returns>
-        public static string SecondsToPeriodString(int seconds)
+        public static string SecondsToPeriodString(int seconds, bool capitalAfterMinute = false)
         {
             const int minuteThreshold = 60;
             const int hourThreshold = 60 * 60;
@@ -1152,15 +1180,15 @@ namespace ExchangeSharp
             }
             else if (seconds >= weekThreshold)
             {
-                return seconds / weekThreshold + "w";
+                return seconds / weekThreshold + (capitalAfterMinute ? "W" : "w");
             }
             else if (seconds >= dayThreshold)
             {
-                return seconds / dayThreshold + "d";
+                return seconds / dayThreshold + (capitalAfterMinute ? "D" : "d");
             }
             else if (seconds >= hourThreshold)
             {
-                return seconds / hourThreshold + "h";
+                return seconds / hourThreshold + (capitalAfterMinute ? "H" : "h");
             }
             else if (seconds >= minuteThreshold)
             {
@@ -1474,9 +1502,19 @@ namespace ExchangeSharp
         /// </summary>
         UnixSeconds,
 
-        /// <summary>
-        /// ISO 8601
-        /// </summary>
-        Iso8601
-    }
+		/// <summary>
+		/// ISO 8601 in local time
+		/// </summary>
+		Iso8601Local,
+
+		/// <summary>
+		/// ISO 8601 in Korea Standard Time
+		/// </summary>
+		Iso8601Korea,
+
+		/// <summary>
+		/// ISO 8601 in UTC
+		/// </summary>
+		Iso8601UTC,
+	}
 }
