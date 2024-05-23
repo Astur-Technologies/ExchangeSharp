@@ -125,6 +125,12 @@ namespace ExchangeSharp
 		public decimal QuoteCurrencyVolume { get; set; }
 
 		/// <summary>
+		/// Amount in units of the QuoteCurrency - will equal BaseCurrencyVolume if exchange doesn't break it out by price unit and quantity unit
+		/// In BTC-USD, this would be USD volume
+		/// </summary>
+		public decimal QuoteCurrencyVolumeToday { get; set; }
+
+		/// <summary>
 		/// Base currency
 		/// In BTC-USD, this would be BTC
 		/// </summary>
@@ -135,6 +141,12 @@ namespace ExchangeSharp
 		/// In BTC-USD this would be BTC volume
 		/// </summary>
 		public decimal BaseCurrencyVolume { get; set; }
+
+		/// <summary>
+		/// Base currency amount (this many units total)
+		/// In BTC-USD this would be BTC volume
+		/// </summary>
+		public decimal BaseCurrencyVolumeToday { get; set; }
 
 		/// <inheritdoc />
 		public override string ToString()

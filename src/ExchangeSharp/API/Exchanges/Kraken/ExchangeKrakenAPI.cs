@@ -640,8 +640,10 @@ namespace ExchangeSharp
 				Volume = new ExchangeVolume
 				{
 					QuoteCurrencyVolume = ticker["v"][1].ConvertInvariant<decimal>(),
+					QuoteCurrencyVolumeToday = ticker["v"][0].ConvertInvariant<decimal>(),
 					QuoteCurrency = quoteCurrency,
 					BaseCurrencyVolume = ticker["v"][1].ConvertInvariant<decimal>() * ticker["p"][1].ConvertInvariant<decimal>(),
+					BaseCurrencyVolumeToday = ticker["v"][0].ConvertInvariant<decimal>() * ticker["p"][0].ConvertInvariant<decimal>(),
 					BaseCurrency = baseCurrency,
 					Timestamp = CryptoUtility.UtcNow
 				}
